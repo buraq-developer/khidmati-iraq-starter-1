@@ -242,20 +242,31 @@ def employee_update_status(
 
 
 def employee_resolve_report(
-    db: Session, employee: User, report_id: int, data: ResolveRequest
+    db: Session,
+    employee: User,
+    report_id: int,
+    resolution_notes: str | None = None,
 ) -> Report:
     """
-    Resolve a report.
-    TODO (TASK-07): Enforce resolution rules and tracking.
+    Employee resolves a report.
+    Validates state transition and records status history.
     """
     report = get_report_for_employee(db, employee, report_id)
 
-    report.resolution_summary = data.resolution_summary
-    report.resolved_at = datetime.now(timezone.utc)
-    report.status = ReportStatus.resolved
-    
-    # TODO (TASK-07): Record status change in history.
-    
+    # TASK-07: التحقق من إمكانية التحويل لحالة resolved وتسجيل التاريخ
+    validate_transition(report.status, ReportStatus.resolved)
+
+    if resolution_notes:
+        report.resolution_notes = resolution_notes
+
+    record_status_change(
+        db=db,
+        report=report,
+        new_status=ReportStatus.resolved,
+        changed_by=employee,
+        note=resolution_notes or "Report resolved",
+    )
+
     db.commit()
     db.refresh(report)
     return report

@@ -34,16 +34,22 @@ from app.schemas.report import (
 # ---------------------------------------------------------------------------
 # Valid status transitions
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Valid status transitions
+# ---------------------------------------------------------------------------
 
-# Allowed transitions for employees
-# TODO (TASK-05): Define valid transitions
-EMPLOYEE_TRANSITIONS: dict[ReportStatus, list[ReportStatus]] = {}
+ALLOWED_TRANSITIONS: dict[ReportStatus, list[ReportStatus]] = {
+    ReportStatus.submitted: [ReportStatus.under_review, ReportStatus.rejected, ReportStatus.cancelled],
+    ReportStatus.under_review: [ReportStatus.assigned, ReportStatus.rejected, ReportStatus.cancelled],
+    ReportStatus.assigned: [ReportStatus.in_progress, ReportStatus.under_review],
+    ReportStatus.in_progress: [ReportStatus.resolved, ReportStatus.assigned],
+}
 
 def validate_transition(from_status: ReportStatus, to_status: ReportStatus) -> None:
-    """
-    TODO (TASK-05): Raise InvalidStatusTransitionError if the transition is not allowed.
-    """
-    pass
+    """Raise InvalidStatusTransitionError if the transition is not allowed."""
+    allowed = ALLOWED_TRANSITIONS.get(from_status, [])
+    if to_status not in allowed:
+        raise InvalidStatusTransitionError(from_status.value, to_status.value)
 
 
 # ---------------------------------------------------------------------------
@@ -131,11 +137,12 @@ def create_report(db: Session, citizen: User, data: ReportCreate) -> Report:
     db.add(report)
     db.flush()  # Get report.id before recording history.
 
-    # TODO (TASK-05): Record the initial status entry in history.
+    # TASK-05: تسجيل الحالة الأولية في سجل التغييرات
+    record_status_change(db, report, ReportStatus.submitted, citizen, note="Report created")
+
     db.commit()
     db.refresh(report)
     return report
-
 def get_citizen_report(db: Session, citizen: User, report_id: int) -> Report:
     """
     Return a report.

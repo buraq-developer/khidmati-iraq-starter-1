@@ -3,11 +3,12 @@ app/services/report_service.py
 Core business logic for report management.
 All status-transition rules live in this file.
 """
-
+import math
 from datetime import datetime, timezone
+from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
 from app.core.exceptions import (
     BadRequestError,
     InvalidStatusTransitionError,
@@ -133,15 +134,20 @@ def create_report(db: Session, citizen: User, data: ReportCreate) -> Report:
     db.refresh(report)
     return report
 
-
 def get_citizen_report(db: Session, citizen: User, report_id: int) -> Report:
     """
     Return a report.
-    TODO (TASK-02): Ensure citizens can only view their own reports!
+    Ensure citizens can only view their own reports!
     """
     report = db.get(Report, report_id)
+    
     if report is None:
         raise NotFoundError("Report")
+        
+    # التحقق من أن البلاغ يخص المواطن الحالي
+    if report.citizen_id != citizen.id:
+        raise PermissionDeniedError("You do not have permission to access this report.")
+        
     return report
 
 
@@ -319,3 +325,58 @@ def admin_update_priority(
     db.commit()
     db.refresh(report)
     return report
+def get_admin_reports(
+    db: Session,
+    page: int = 1,
+    page_size: int = 20,
+    status: Optional[ReportStatus] = None,
+    priority: Optional[ReportPriority] = None,
+    category_id: Optional[int] = None,
+    governorate_id: Optional[int] = None,
+    assigned_employee_id: Optional[int] = None,
+    search: Optional[str] = None,
+):
+    query = db.query(Report)
+
+    # الفلترة
+    if status:
+        query = query.filter(Report.status == status)
+    if priority:
+        query = query.filter(Report.priority == priority)
+    if category_id:
+        query = query.filter(Report.category_id == category_id)
+    if governorate_id:
+        query = query.filter(Report.governorate_id == governorate_id)
+    if assigned_employee_id is not None:
+        query = query.filter(Report.assigned_employee_id == assigned_employee_id)
+
+    # البحث بالنص
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Report.reference_number.ilike(pattern),
+                Report.title.ilike(pattern),
+                Report.description.ilike(pattern),
+            )
+        )
+
+    # حساب الإجمالي وعدد الصفحات
+    total = query.count()
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
+
+    # الـ Pagination
+    items = (
+        query.order_by(Report.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "items": items,
+    }

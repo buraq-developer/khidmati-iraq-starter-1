@@ -3,6 +3,7 @@ app/api/v1/admin.py
 Admin-only endpoints for user management, report oversight, and dashboard.
 """
 
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -97,21 +98,38 @@ def toggle_user_status(
 # ---------------------------------------------------------------------------
 
 @router.get("/reports", response_model=PaginatedResponse)
+@router.get("/reports", response_model=PaginatedResponse)
 def list_reports(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    status: Optional[ReportStatus] = Query(None, description="Filter by report status"),
+    priority: Optional[ReportPriority] = Query(None, description="Filter by report priority"),
+    category_id: Optional[int] = Query(None, ge=1, description="Filter by category ID"),
+    governorate_id: Optional[int] = Query(None, ge=1, description="Filter by governorate ID"),
+    assigned_employee_id: Optional[int] = Query(None, ge=1, description="Filter by assigned employee ID"),
+    search: Optional[str] = Query(None, description="Search keyword for reference number, title, or description"),
 ):
-    """
-    List all reports.
-    TODO (TASK-01): Implement filtering, search, and pagination.
-    """
-    items = db.query(Report).order_by(Report.created_at.desc()).all()
+    """List all reports with optional filtering, search, and pagination."""
+    result = report_service.get_admin_reports(
+        db=db,
+        page=page,
+        page_size=page_size,
+        status=status,
+        priority=priority,
+        category_id=category_id,
+        governorate_id=governorate_id,
+        assigned_employee_id=assigned_employee_id,
+        search=search,
+    )
 
     return PaginatedResponse(
-        page=1,
-        page_size=len(items) if items else 20,
-        total=len(items),
-        items=[ReportResponse.model_validate(r) for r in items],
+        page=result["page"],
+        page_size=result["page_size"],
+        total=result["total"],
+        total_pages=result["total_pages"],
+        items=[ReportResponse.model_validate(r) for r in result["items"]],
     )
 
 
@@ -141,20 +159,34 @@ def update_priority(
 # Dashboard
 # ---------------------------------------------------------------------------
 
-@router.get("/dashboard")
-def dashboard(
+@router.get("/dashboard/stats")
+def get_dashboard_stats(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ):
     """
-    High-level statistics for the admin dashboard.
-    TODO (TASK-08): Complete the dashboard implementation.
+    Calculate and return key system metrics for the admin dashboard.
     """
+    total_reports = db.query(func.count(Report.id)).scalar() or 0
+    total_users = db.query(func.count(User.id)).scalar() or 0
+
+    status_counts = (
+        db.query(Report.status, func.count(Report.id))
+        .group_by(Report.status)
+        .all()
+    )
+    by_status = {status.value: count for status, count in status_counts}
+
+    priority_counts = (
+        db.query(Report.priority, func.count(Report.id))
+        .group_by(Report.priority)
+        .all()
+    )
+    by_priority = {priority.value: count for priority, count in priority_counts}
+
     return {
-        "total_reports": 0,
-        "open_reports": 0,
-        "resolved_reports": 0,
-        "reports_by_status": {},
-        "reports_by_priority": {},
-        "reports_by_category": {},
+        "total_reports": total_reports,
+        "total_users": total_users,
+        "reports_by_status": by_status,
+        "reports_by_priority": by_priority,
     }

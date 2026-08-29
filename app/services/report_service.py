@@ -202,8 +202,9 @@ def cancel_report(db: Session, citizen: User, report_id: int) -> Report:
             "You can only cancel a report that is in 'submitted' or 'under_review' status.",
         )
 
-    report.status = ReportStatus.cancelled
-    # TODO (TASK-05): Record this change in status history.
+    # TASK-05: التحقق والتسجيل عبر record_status_change
+    validate_transition(report.status, ReportStatus.cancelled)
+    record_status_change(db, report, ReportStatus.cancelled, citizen, note="Cancelled by citizen")
 
     db.commit()
     db.refresh(report)
@@ -231,10 +232,9 @@ def employee_update_status(
     """Employee changes a report status."""
     report = get_report_for_employee(db, employee, report_id)
     
-    # TODO (TASK-05): Validate transition using allowed transition table.
-    report.status = data.new_status
-    
-    # TODO (TASK-05): Record status change.
+    # TASK-05: التحقق من صحة التغيير وتسجيله في تاريخ البلاغ
+    validate_transition(report.status, data.new_status)
+    record_status_change(db, report, data.new_status, employee, note=getattr(data, "note", None))
     
     db.commit()
     db.refresh(report)
@@ -272,6 +272,10 @@ def add_comment(
     report = db.get(Report, report_id)
     if report is None:
         raise NotFoundError("Report")
+
+    # TASK-06: منع المواطنين من إضافة ملاحظات داخلية
+    if is_internal and author.role == UserRole.citizen:
+        raise PermissionDeniedError("Citizens cannot create internal notes.")
 
     comment = ReportComment(
         report_id=report_id,

@@ -303,17 +303,25 @@ def admin_assign_report(
     if not employee.is_active:
         raise BadRequestError("INACTIVE_EMPLOYEE", "The selected employee is inactive.")
 
-    # TODO (TASK-04): Ensure employee belongs to the same governorate.
-    
+    # TASK-04: التأكد من أن الموظف يتبع لنفس محافظة البلاغ
+    if employee.governorate_id != report.governorate_id:
+        raise BadRequestError("GOVERNORATE_MISMATCH", "Employee does not belong to the report's governorate.")
+
+    # تعيين الموظف
     report.assigned_employee_id = employee.id
-    report.status = ReportStatus.assigned
-    
-    # TODO (TASK-04): Record this status change in history.
-    
+
+    # تسجيل تغيير الحالة إلى assigned وإنشاء سجل التاريخ
+    record_status_change(
+        db=db,
+        report=report,
+        new_status=ReportStatus.assigned,
+        changed_by=admin,
+        note=f"Assigned to employee {employee.full_name}",
+    )
+
     db.commit()
     db.refresh(report)
     return report
-
 
 def admin_update_priority(
     db: Session, report_id: int, data: PriorityUpdateRequest

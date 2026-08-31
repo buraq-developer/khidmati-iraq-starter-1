@@ -13,3 +13,5 @@ build/
 htmlcov/
 .coverage
 *.log
+.env
+*.db

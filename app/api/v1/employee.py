@@ -27,29 +27,30 @@ router = APIRouter(prefix="/employee", tags=["Employee"])
 def list_governorate_reports(
     db: Session = Depends(get_db),
     employee: User = Depends(require_employee),
+    urgent_only: bool = False,
 ):
     """List all reports in the employee's governorate."""
-    return (
-        db.query(Report)
-        .filter(Report.governorate_id == employee.governorate_id)
-        .order_by(Report.created_at.desc())
-        .all()
-    )
+    query = db.query(Report).filter(Report.governorate_id == employee.governorate_id)
+    
+    if urgent_only:
+        query = query.filter(Report.priority == ReportPriority.urgent)
+        
+    return query.order_by(Report.created_at.desc()).all()
 
 
 @router.get("/reports/assigned", response_model=list[ReportResponse])
 def list_assigned_reports(
     db: Session = Depends(get_db),
     employee: User = Depends(require_employee),
+    urgent_only: bool = False,
 ):
     """List reports assigned to the current employee."""
-    return (
-        db.query(Report)
-        .filter(Report.assigned_employee_id == employee.id)
-        .order_by(Report.created_at.desc())
-        .all()
-    )
-
+    query = db.query(Report).filter(Report.assigned_employee_id == employee.id)
+    
+    if urgent_only:
+        query = query.filter(Report.priority == ReportPriority.urgent)
+        
+    return query.order_by(Report.created_at.desc()).all()
 
 @router.patch("/reports/{report_id}/status", response_model=ReportResponse)
 def update_status(

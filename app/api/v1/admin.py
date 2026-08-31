@@ -98,7 +98,6 @@ def toggle_user_status(
 # ---------------------------------------------------------------------------
 
 @router.get("/reports", response_model=PaginatedResponse)
-@router.get("/reports", response_model=PaginatedResponse)
 def list_reports(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
@@ -106,6 +105,7 @@ def list_reports(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     status: Optional[ReportStatus] = Query(None, description="Filter by report status"),
     priority: Optional[ReportPriority] = Query(None, description="Filter by report priority"),
+    urgent_only: bool = Query(False, description="Filter for urgent reports only"),
     category_id: Optional[int] = Query(None, ge=1, description="Filter by category ID"),
     governorate_id: Optional[int] = Query(None, ge=1, description="Filter by governorate ID"),
     assigned_employee_id: Optional[int] = Query(None, ge=1, description="Filter by assigned employee ID"),
@@ -116,6 +116,7 @@ def list_reports(
         db=db,
         page=page,
         page_size=page_size,
+        urgent_only=urgent_only,
         status=status,
         priority=priority,
         category_id=category_id,

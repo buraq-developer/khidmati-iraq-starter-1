@@ -117,10 +117,16 @@ def validate_location(
 
 def create_report(db: Session, citizen: User, data: ReportCreate) -> Report:
     """Create a new report submitted by a citizen."""
+    # إضافة هذا الشرط لمنع المواطنين من اختيار الأولوية العاجلة
+    if getattr(data, "priority", None) == ReportPriority.urgent:
+        raise BadRequestError("INVALID_PRIORITY", "Citizens cannot set report priority to urgent.")
+
     validate_location(db, data.governorate_id, data.area_id, data.category_id)
 
     year = datetime.now(timezone.utc).year
     ref = generate_reference_number(db, year)
+    
+    # باقي الكود كما هو...
 
     report = Report(
         reference_number=ref,

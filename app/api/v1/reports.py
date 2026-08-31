@@ -110,9 +110,9 @@ def get_report_comments(
     report_service.get_citizen_report(db, citizen, report_id)
     return (
         db.query(ReportComment)
-     .filter(
+        .filter(
             ReportComment.report_id == report_id,
-            ReportComment.is_internal == False,  # <--- أضف هذا السطر فقط
+            ReportComment.is_internal == False,
         )
         .order_by(ReportComment.created_at.asc())
         .all()

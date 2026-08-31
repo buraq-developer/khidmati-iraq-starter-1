@@ -2,6 +2,7 @@
 app/api/v1/employee.py
 Employee-facing endpoints for managing reports within their governorate.
 """
+from app.models.report import Report, ReportPriority
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session

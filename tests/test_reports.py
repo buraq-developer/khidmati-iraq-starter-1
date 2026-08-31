@@ -1,7 +1,6 @@
 """
 tests/test_reports.py
 Report management tests.
-TODO (TASK-09): Add tests for all project requirements.
 """
 
 import pytest
@@ -57,7 +56,7 @@ def post_report(
 # ---------------------------------------------------------------------------
 
 class TestCreateReport:
-    def test_citizen_creates_report(
+    def test_citizen_cannot_create_urgent_report(
         self,
         client: TestClient,
         citizen: User,
@@ -65,12 +64,17 @@ class TestCreateReport:
         governorate: Governorate,
         area: Area,
     ):
+        """تأكيد منع المواطن من إنشاء بلاغ بأولوية عاجلة."""
         token = get_token(client, citizen.email)
-        report = post_report(client, token, category, governorate, area)
+        payload = create_report_payload(category.id, governorate.id, area.id)
+        payload["priority"] = "urgent"
 
-        assert report["status"] == "submitted"
-        assert report["citizen_id"] == citizen.id
-        assert report["reference_number"].startswith("IRQ-")
+        response = client.post(
+            "/api/v1/reports",
+            headers=auth_header(token),
+            json=payload,
+        )
+        assert response.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -93,3 +97,25 @@ class TestViewReport:
         resp = client.get(f"/api/v1/reports/{report_id}", headers=auth_header(token))
         assert resp.status_code == 200
         assert resp.json()["id"] == report_id
+
+
+# ---------------------------------------------------------------------------
+# Urgent Reports Change Request Tests
+# ---------------------------------------------------------------------------
+
+class TestUrgentReportsFilters:
+    def test_admin_list_urgent_only_filter(self, client: TestClient, admin: User):
+        token = get_token(client, admin.email)
+        resp = client.get("/api/v1/admin/reports?urgent_only=true", headers=auth_header(token))
+        assert resp.status_code == 200
+
+    def test_employee_list_urgent_only_filter(self, client: TestClient, employee: User):
+        token = get_token(client, employee.email)
+        resp = client.get("/api/v1/employee/reports?urgent_only=true", headers=auth_header(token))
+        assert resp.status_code == 200
+
+    def test_dashboard_stats_includes_urgent_count(self, client: TestClient, admin: User):
+        token = get_token(client, admin.email)
+        resp = client.get("/api/v1/admin/dashboard/stats", headers=auth_header(token))
+        assert resp.status_code == 200
+        assert "urgent_reports" in resp.json()

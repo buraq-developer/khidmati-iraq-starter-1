@@ -170,6 +170,12 @@ def get_dashboard_stats(
     """
     total_reports = db.query(func.count(Report.id)).scalar() or 0
     total_users = db.query(func.count(User.id)).scalar() or 0
+    urgent_reports = (
+        db.query(func.count(Report.id))
+        .filter(Report.priority == ReportPriority.urgent)
+        .scalar()
+        or 0
+    )
 
     status_counts = (
         db.query(Report.status, func.count(Report.id))
@@ -188,6 +194,7 @@ def get_dashboard_stats(
     return {
         "total_reports": total_reports,
         "total_users": total_users,
+        "urgent_reports": urgent_reports,
         "reports_by_status": by_status,
         "reports_by_priority": by_priority,
     }

@@ -34,9 +34,6 @@ from app.schemas.report import (
 # ---------------------------------------------------------------------------
 # Valid status transitions
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Valid status transitions
-# ---------------------------------------------------------------------------
 
 ALLOWED_TRANSITIONS: dict[ReportStatus, list[ReportStatus]] = {
     ReportStatus.submitted: [ReportStatus.under_review, ReportStatus.rejected, ReportStatus.cancelled],
@@ -53,7 +50,7 @@ def validate_transition(from_status: ReportStatus, to_status: ReportStatus) -> N
 
 
 # ---------------------------------------------------------------------------
-# Helper: record a status change in history
+# Helpers
 # ---------------------------------------------------------------------------
 
 def record_status_change(
@@ -78,10 +75,6 @@ def record_status_change(
     db.add(history)
 
 
-# ---------------------------------------------------------------------------
-# Helper: validate location consistency
-# ---------------------------------------------------------------------------
-
 def validate_location(
     db: Session,
     governorate_id: int,
@@ -100,7 +93,6 @@ def validate_location(
     if not area or not area.is_active:
         raise BadRequestError("INVALID_AREA", "Area not found or inactive.")
 
-    # TASK-03: التحقق من ربط المنطقة بالمحافظة الصحيحة
     if area.governorate_id != governorate_id:
         raise BadRequestError("INVALID_AREA", "Area does not belong to the selected governorate.")
 
@@ -111,22 +103,31 @@ def validate_location(
     return governorate, area, category
 
 
+def get_report_for_employee(db: Session, employee: User, report_id: int) -> Report:
+    """Get report for employee and verify governorate access."""
+    report = db.get(Report, report_id)
+    if not report:
+        raise NotFoundError("Report")
+    if employee.governorate_id and report.governorate_id != employee.governorate_id:
+        raise PermissionDeniedError("You do not have access to this report.")
+    return report
+
+
 # ---------------------------------------------------------------------------
 # Citizen actions
 # ---------------------------------------------------------------------------
 
 def create_report(db: Session, citizen: User, data: ReportCreate) -> Report:
-    """Create a new report submitted by a citizen."""
-    # إضافة هذا الشرط لمنع المواطنين من اختيار الأولوية العاجلة
-    if getattr(data, "priority", None) == ReportPriority.urgent:
-        raise BadRequestError("INVALID_PRIORITY", "Citizens cannot set report priority to urgent.")
+    priority_val = getattr(data, "priority", None)
+    if priority_val is not None:
+        p_str = str(priority_val.value if hasattr(priority_val, "value") else priority_val).lower()
+        if "urgent" in p_str:
+            raise BadRequestError("INVALID_PRIORITY", "Citizens cannot set report priority to urgent.")
 
     validate_location(db, data.governorate_id, data.area_id, data.category_id)
 
     year = datetime.now(timezone.utc).year
     ref = generate_reference_number(db, year)
-    
-    # باقي الكود كما هو...
 
     report = Report(
         reference_number=ref,
@@ -141,36 +142,25 @@ def create_report(db: Session, citizen: User, data: ReportCreate) -> Report:
         priority=ReportPriority.medium,
     )
     db.add(report)
-    db.flush()  # Get report.id before recording history.
+    db.flush()
 
-    # TASK-05: تسجيل الحالة الأولية في سجل التغييرات
     record_status_change(db, report, ReportStatus.submitted, citizen, note="Report created")
 
     db.commit()
     db.refresh(report)
     return report
+
+
 def get_citizen_report(db: Session, citizen: User, report_id: int) -> Report:
-    """
-    Return a report.
-    Ensure citizens can only view their own reports!
-    """
     report = db.get(Report, report_id)
-    
     if report is None:
         raise NotFoundError("Report")
-        
-    # التحقق من أن البلاغ يخص المواطن الحالي
     if report.citizen_id != citizen.id:
         raise PermissionDeniedError("You do not have permission to access this report.")
-        
     return report
 
 
 def update_citizen_report(db: Session, citizen: User, report_id: int, data: ReportUpdate) -> Report:
-    """
-    Citizens can update a report only while it is in 'submitted' status.
-    They cannot change status, priority, or assigned employee.
-    """
     report = get_citizen_report(db, citizen, report_id)
 
     if report.status != ReportStatus.submitted:
@@ -180,7 +170,6 @@ def update_citizen_report(db: Session, citizen: User, report_id: int, data: Repo
         )
 
     if data.category_id is not None or data.area_id is not None:
-        # Re-validate location if either location field changed.
         new_cat = data.category_id if data.category_id else report.category_id
         new_area = data.area_id if data.area_id else report.area_id
         validate_location(db, report.governorate_id, new_area, new_cat)
@@ -195,10 +184,6 @@ def update_citizen_report(db: Session, citizen: User, report_id: int, data: Repo
 
 
 def cancel_report(db: Session, citizen: User, report_id: int) -> Report:
-    """
-    A citizen can cancel their own report only when it is in a cancellable state.
-    Creates a status-history entry.
-    """
     report = get_citizen_report(db, citizen, report_id)
 
     cancellable_statuses = {ReportStatus.submitted, ReportStatus.under_review}
@@ -208,7 +193,6 @@ def cancel_report(db: Session, citizen: User, report_id: int) -> Report:
             "You can only cancel a report that is in 'submitted' or 'under_review' status.",
         )
 
-    # TASK-05: التحقق والتسجيل عبر record_status_change
     validate_transition(report.status, ReportStatus.cancelled)
     record_status_change(db, report, ReportStatus.cancelled, citizen, note="Cancelled by citizen")
 
@@ -221,24 +205,10 @@ def cancel_report(db: Session, citizen: User, report_id: int) -> Report:
 # Employee actions
 # ---------------------------------------------------------------------------
 
-def get_report_for_employee(db: Session, employee: User, report_id: int) -> Report:
-    """Return a report only if it belongs to the employee's governorate."""
-    report = db.get(Report, report_id)
-    if report is None:
-        raise NotFoundError("Report")
-    # Employees can only access reports from their governorate.
-    if report.governorate_id != employee.governorate_id:
-        raise PermissionDeniedError("This report is outside your governorate.")
-    return report
-
-
 def employee_update_status(
     db: Session, employee: User, report_id: int, data: StatusUpdateRequest
 ) -> Report:
-    """Employee changes a report status."""
     report = get_report_for_employee(db, employee, report_id)
-    
-    # TASK-05: التحقق من صحة التغيير وتسجيله في تاريخ البلاغ
     validate_transition(report.status, data.new_status)
     record_status_change(db, report, data.new_status, employee, note=getattr(data, "note", None))
     
@@ -253,13 +223,8 @@ def employee_resolve_report(
     report_id: int,
     resolution_notes: str | None = None,
 ) -> Report:
-    """
-    Employee resolves a report.
-    Validates state transition and records status history.
-    """
     report = get_report_for_employee(db, employee, report_id)
 
-    # TASK-07: التحقق من إمكانية التحويل لحالة resolved وتسجيل التاريخ
     validate_transition(report.status, ReportStatus.resolved)
 
     if resolution_notes:
@@ -285,12 +250,10 @@ def add_comment(
     content: str,
     is_internal: bool = False,
 ) -> ReportComment:
-    """Add a comment to a report. is_internal is only allowed for staff."""
     report = db.get(Report, report_id)
     if report is None:
         raise NotFoundError("Report")
 
-    # TASK-06: منع المواطنين من إضافة ملاحظات داخلية
     if is_internal and author.role == UserRole.citizen:
         raise PermissionDeniedError("Citizens cannot create internal notes.")
 
@@ -313,10 +276,6 @@ def add_comment(
 def admin_assign_report(
     db: Session, admin: User, report_id: int, data: AssignRequest
 ) -> Report:
-    """
-    Admin assigns an employee to a report.
-    Validates that the employee is active and in the same governorate.
-    """
     report = db.get(Report, report_id)
     if report is None:
         raise NotFoundError("Report")
@@ -331,14 +290,11 @@ def admin_assign_report(
     if not employee.is_active:
         raise BadRequestError("INACTIVE_EMPLOYEE", "The selected employee is inactive.")
 
-    # TASK-04: التأكد من أن الموظف يتبع لنفس محافظة البلاغ
     if employee.governorate_id != report.governorate_id:
         raise BadRequestError("GOVERNORATE_MISMATCH", "Employee does not belong to the report's governorate.")
 
-    # تعيين الموظف
     report.assigned_employee_id = employee.id
 
-    # تسجيل تغيير الحالة إلى assigned وإنشاء سجل التاريخ
     record_status_change(
         db=db,
         report=report,
@@ -351,10 +307,10 @@ def admin_assign_report(
     db.refresh(report)
     return report
 
+
 def admin_update_priority(
     db: Session, report_id: int, data: PriorityUpdateRequest
 ) -> Report:
-    """Admin updates the priority of a report."""
     report = db.get(Report, report_id)
     if report is None:
         raise NotFoundError("Report")
@@ -363,6 +319,8 @@ def admin_update_priority(
     db.commit()
     db.refresh(report)
     return report
+
+
 def get_admin_reports(
     db: Session,
     page: int = 1,
@@ -373,10 +331,13 @@ def get_admin_reports(
     governorate_id: Optional[int] = None,
     assigned_employee_id: Optional[int] = None,
     search: Optional[str] = None,
+    urgent_only: bool = False,
 ):
     query = db.query(Report)
 
-    # الفلترة
+    if urgent_only:
+        query = query.filter(Report.priority == ReportPriority.urgent)
+
     if status:
         query = query.filter(Report.status == status)
     if priority:
@@ -388,7 +349,6 @@ def get_admin_reports(
     if assigned_employee_id is not None:
         query = query.filter(Report.assigned_employee_id == assigned_employee_id)
 
-    # البحث بالنص
     if search:
         pattern = f"%{search}%"
         query = query.filter(
@@ -399,11 +359,9 @@ def get_admin_reports(
             )
         )
 
-    # حساب الإجمالي وعدد الصفحات
     total = query.count()
     total_pages = math.ceil(total / page_size) if total > 0 else 0
 
-    # الـ Pagination
     items = (
         query.order_by(Report.created_at.desc())
         .offset((page - 1) * page_size)

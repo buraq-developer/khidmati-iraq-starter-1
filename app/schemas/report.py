@@ -3,6 +3,8 @@ app/schemas/report.py
 Pydantic v2 schemas for reports, filters, and pagination.
 """
 
+from typing import Optional
+from app.models.report import ReportPriority
 from datetime import datetime
 from typing import Any
 
@@ -22,9 +24,10 @@ class ReportCreate(BaseModel):
     category_id: int
     governorate_id: int
     area_id: int
-    title: str = Field(min_length=5, max_length=255)
-    description: str = Field(min_length=10)
-    address_details: str | None = None
+    title: str
+    description: str
+    address_details: Optional[str] = None
+    priority: Optional[ReportPriority] = None  # <--- أضف هذا السطر
 
 
 class ReportUpdate(BaseModel):

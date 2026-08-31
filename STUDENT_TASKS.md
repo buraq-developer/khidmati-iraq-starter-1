@@ -88,7 +88,6 @@ pip install -r requirements.txt
 
 # Run migrations
 alembic upgrade head
-
 # Seed the database
 python -m scripts.seed
 
@@ -104,6 +103,7 @@ pytest -v
 *Note: You must use your own local PostgreSQL database and `.env` file.*
 
 ---
+
 
 ## 5. Initial Repository Checkpoint
 

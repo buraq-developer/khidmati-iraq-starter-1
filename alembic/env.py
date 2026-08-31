@@ -1,51 +1,26 @@
-"""
-alembic/env.py
-Alembic environment configuration.
-We import all models so autogenerate can detect every table.
-"""
-
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# ---------------------------------------------------------------------------
-# Import the application's settings and models
-# ---------------------------------------------------------------------------
-
-# Load settings to get the database URL.
 from app.config import settings
-
-# Import Base (required for autogenerate).
 from app.database import Base
-
-# Import ALL models so Alembic can see every table.
-import app.models  # noqa: F401 – side-effect import registers all models
-
-# ---------------------------------------------------------------------------
-# Alembic Config
-# ---------------------------------------------------------------------------
+import app.models  # noqa: F401
 
 config = context.config
 
-# Override sqlalchemy.url from the application settings.
-# This ensures .env is always the single source of truth.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Read DB URL from .env file
+db_url = str(settings.database_url).replace("postgresql+asyncpg://", "postgresql://")
+config.set_main_option("sqlalchemy.url", db_url)
 
-# Interpret the config file for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
 
-# ---------------------------------------------------------------------------
-# Migration runners
-# ---------------------------------------------------------------------------
-
 def run_migrations_offline() -> None:
-    """Run migrations without a live database connection (SQL script output)."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -59,7 +34,6 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations against the live database."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

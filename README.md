@@ -461,3 +461,52 @@ python -m scripts.create_admin
 ## License
 
 This project is intended for educational use. Students are encouraged to explore, modify, and extend the codebase.
+
+## Final Submission Checklist
+
+### Environment
+* [x] My virtual environment works.
+* [x] My PostgreSQL database connects.
+* [x] My `.env` is not committed.
+* [x] Alembic migrations run.
+* [x] The seed script runs safely.
+* [x] The FastAPI server starts.
+* [x] Swagger opens.
+
+### Authentication and Permissions
+* [x] Registration works.
+* [x] Login works.
+* [x] Inactive users cannot log in.
+* [x] Citizen permissions work.
+* [x] Employee permissions work.
+* [x] Admin permissions work.
+* [x] Citizens can access only their reports.
+* [x] Employees cannot access another governorate’s reports.
+* [x] Internal notes are protected.
+
+### Reports
+* [x] Report creation works.
+* [x] Governorate and area validation works.
+* [x] Report filtering works.
+* [x] Search works.
+* [x] Pagination works.
+* [x] Assignment validation works.
+* [x] Valid status transitions work.
+* [x] Invalid transitions fail.
+* [x] Every status change creates history.
+* [x] Resolution requires a summary.
+* [x] `resolved_at` is stored.
+* [x] Dashboard counts are correct.
+* [x] Urgent-report requirements work.
+
+### Quality
+* [x] Automated tests pass.
+* [x] Tests use a separate test database.
+* [x] Swagger matches my implementation.
+* [x] Documentation is complete.
+* [x] Known limitations are documented.
+* [x] My Git commits are clear.
+* [x] My repository is pushed.
+* [x] My presentation is ready.
+* [x] I can explain my submitted code.
+*
